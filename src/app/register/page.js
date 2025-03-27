@@ -285,7 +285,7 @@ const DriverRegistration = () => {
         };
         console.log(payload);
         const response = await axios.post(
-          "http://localhost:5000/api/register",
+          "https://cab-backend.vercel.app/api/register",
           payload,
           {
             headers: {
