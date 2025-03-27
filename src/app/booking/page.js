@@ -17,17 +17,69 @@ const Booking = () => {
     phone: "",
     specialRequests: "",
     paymentMethod: "card",
+    distance: 0,
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+
+  // Updated estimation function for Indian cities
+  const estimateFare = (distance, vehicleType, passengers) => {
+    const baseRates = {
+      sedan: 15, // ₹15 per km for sedan
+      suv: 18, // ₹18 per km for SUV
+      van: 22, // ₹22 per km for van
+    };
+
+    const perPassengerRate = 50; // Additional ₹50 per extra passenger
+    const baseFare = 200; // Base booking charge
+    const serviceCharge = 100; // Service fee
+
+    const distanceCharge = distance * baseRates[vehicleType];
+    const passengerCharge = (parseInt(passengers) - 1) * perPassengerRate;
+
+    const totalFare =
+      baseFare + distanceCharge + passengerCharge + serviceCharge;
+
+    return {
+      baseFare: baseFare,
+      distanceCharge: distanceCharge,
+      passengerCharge: passengerCharge,
+      serviceCharge: serviceCharge,
+      total: Math.round(totalFare),
+    };
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const calculateDistance = (pickup, destination) => {
+    // In a real app, this would use a mapping API
+    // This is a simplified estimation function
+    const cityDistances = {
+      mumbai: { pune: 150, delhi: 1400, bangalore: 1000 },
+      delhi: { mumbai: 1400, bangalore: 1700, chennai: 2200 },
+      bangalore: { mumbai: 1000, delhi: 1700, chennai: 350 },
+      chennai: { delhi: 2200, bangalore: 350, mumbai: 1300 },
+      pune: { mumbai: 150, bangalore: 850 },
+    };
+
+    const normalizeName = (name) => name.toLowerCase().split(" ")[0];
+    const normalizedPickup = normalizeName(pickup);
+    const normalizedDestination = normalizeName(destination);
+
+    // Look up distance or return a default
+    return cityDistances[normalizedPickup]?.[normalizedDestination] || 200;
+  };
+
   const handleNextStep = () => {
+    if (activeStep === 1) {
+      // Calculate distance when moving to next step
+      const distance = calculateDistance(formData.pickup, formData.destination);
+      setFormData((prev) => ({ ...prev, distance }));
+    }
     setActiveStep((prev) => prev + 1);
     window.scrollTo(0, 0);
   };
@@ -48,6 +100,13 @@ const Booking = () => {
       console.log("Booking data:", formData);
     }, 1500);
   };
+
+  // Calculate fare when needed
+  const fareEstimate = estimateFare(
+    formData.distance,
+    formData.vehicleType,
+    formData.passengers
+  );
 
   return (
     <>
@@ -394,8 +453,56 @@ const Booking = () => {
                     <h2 className="text-2xl font-bold text-gray-700 mb-6">
                       Review Your Booking
                     </h2>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-700 mb-4">
+                        Estimated Price Breakdown
+                      </h3>
 
-                    <div className="space-y-8">
+                      <div className="bg-blue-100 p-4 rounded-lg">
+                        <div className="flex justify-between mb-2">
+                          <span className="text-gray-600">Base fare:</span>
+                          <span className="font-medium">
+                            ₹{fareEstimate.baseFare}
+                          </span>
+                        </div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-gray-600">
+                            Distance charge:
+                          </span>
+                          <span className="font-medium">
+                            ₹{fareEstimate.distanceCharge}
+                          </span>
+                        </div>
+                        {formData.passengers > 1 && (
+                          <div className="flex justify-between mb-2">
+                            <span className="text-gray-600">
+                              Additional passenger charge:
+                            </span>
+                            <span className="font-medium">
+                              ₹{fareEstimate.passengerCharge}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between mb-2">
+                          <span className="text-gray-600">Service fee:</span>
+                          <span className="font-medium">
+                            ₹{fareEstimate.serviceCharge}
+                          </span>
+                        </div>
+                        <div className="border-t border-gray-300 my-2 pt-2 flex justify-between">
+                          <span className="font-semibold">Total:</span>
+                          <span className="font-bold text-gray-700">
+                            ₹{fareEstimate.total}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          *Final price may vary based on actual route and
+                          traffic conditions.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-8 pt-4">
                       <div className="border-b border-gray-200 pb-6">
                         <h3 className="text-lg font-semibold text-gray-700 mb-4">
                           Trip Details
@@ -507,33 +614,6 @@ const Booking = () => {
                             </p>
                           </div>
                         )}
-                      </div>
-
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">
-                          Estimated Price
-                        </h3>
-
-                        <div className="bg-blue-100 p-4 rounded-lg">
-                          <div className="flex justify-between mb-2">
-                            <span className="text-gray-600">Base fare:</span>
-                            <span className="font-medium">$75.00</span>
-                          </div>
-                          <div className="flex justify-between mb-2">
-                            <span className="text-gray-600">Service fee:</span>
-                            <span className="font-medium">$5.00</span>
-                          </div>
-                          <div className="border-t border-gray-300 my-2 pt-2 flex justify-between">
-                            <span className="font-semibold">Total:</span>
-                            <span className="font-bold text-gray-700">
-                              $80.00
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500 mt-2">
-                            *Final price may vary based on actual distance and
-                            time.
-                          </p>
-                        </div>
                       </div>
                     </div>
 

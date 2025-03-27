@@ -14,6 +14,7 @@ const Header = () => {
     { name: 'Booking', href: '/booking' },
     { name: 'Drivers', href: '/drivers' },
     { name: 'Trips', href: '/trips' },
+    { name: 'Register', href: '/register' },
   ];
 
   useEffect(() => {
@@ -45,7 +46,7 @@ const Header = () => {
           href="/" 
           className="text-2xl font-bold text-cab-dark flex items-center transform hover:scale-105 transition-transform-300"
         >
-          <span className="text-cab-blue">Cab</span>Fleet
+          <span className="text-cab-blue">Ride</span>Easy
         </Link>
 
         {/* Desktop Navigation */}
