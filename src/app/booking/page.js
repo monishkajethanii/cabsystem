@@ -1,10 +1,25 @@
 "use client";
-import React, { useState } from "react";
-import { Calendar, Clock, MapPin, User, Check } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  Calendar,
+  Clock,
+  MapPin,
+  User,
+  Check,
+  AlertCircle,
+  Loader,
+} from "lucide-react";
 import Header from "../Header";
 
 const Booking = () => {
   const [activeStep, setActiveStep] = useState(1);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [routeError, setRouteError] = useState("");
+  const [suggestedPickups, setSuggestedPickups] = useState([]);
+  const [suggestedDestinations, setSuggestedDestinations] = useState([]);
+  const [showPickupSuggestions, setShowPickupSuggestions] = useState(false);
+  const [showDestSuggestions, setShowDestSuggestions] = useState(false);
+  const [estimatedDuration, setEstimatedDuration] = useState(0);
   const [formData, setFormData] = useState({
     pickup: "",
     destination: "",
@@ -19,31 +34,115 @@ const Booking = () => {
     paymentMethod: "card",
     distance: 0,
   });
+  const api = "03d3f35736664301b06dd430650afda5"
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
 
+  const getAddressSuggestions = async (query, isPickup) => {
+    if (!query || query.length < 3) {
+      isPickup ? setSuggestedPickups([]) : setSuggestedDestinations([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
+          query
+        )}&format=json&limit=5&apiKey=${
+          api
+        }`
+      );
+      const data = await response.json();
+
+      if (data.results) {
+        const suggestions = data.results.map((result) => ({
+          address: result.formatted,
+          lat: result.lat,
+          lon: result.lon,
+        }));
+
+        if (isPickup) {
+          setSuggestedPickups(suggestions);
+          setShowPickupSuggestions(true);
+        } else {
+          setSuggestedDestinations(suggestions);
+          setShowDestSuggestions(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching address suggestions:", error);
+    }
+  };
+
+  // Function to calculate route distance and duration
+  const calculateRoute = async (pickupLat, pickupLon, destLat, destLon) => {
+    setIsCalculating(true);
+    setRouteError("");
+
+    try {
+      const response = await fetch(
+        `https://api.geoapify.com/v1/routing?waypoints=${pickupLat},${pickupLon}|${destLat},${destLon}&mode=drive&apiKey=${api}`
+      );
+      const data = await response.json();
+
+      if (data.features && data.features.length > 0) {
+        const route = data.features[0].properties;
+        const distanceInKm = route.distance / 1000; // Convert meters to kilometers
+        const durationInMinutes = Math.ceil(route.time / 60); // Convert seconds to minutes
+
+        setFormData((prev) => ({
+          ...prev,
+          distance: distanceInKm.toFixed(1),
+          duration: durationInMinutes,
+        }));
+
+        setEstimatedDuration(durationInMinutes);
+        return true;
+      } else {
+        setRouteError("Could not calculate route between these locations");
+        return false;
+      }
+    } catch (error) {
+      console.error("Error calculating route:", error);
+      setRouteError("Error calculating route. Please try again.");
+      return false;
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
   // Updated estimation function for Indian cities
-  const estimateFare = (distance, vehicleType, passengers) => {
+  const estimateFare = (distance, duration, vehicleType, passengers) => {
     const baseRates = {
       sedan: 15, // ₹15 per km for sedan
       suv: 18, // ₹18 per km for SUV
       van: 22, // ₹22 per km for van
     };
 
+    const waitingRates = {
+      sedan: 2, // ₹2 per minute for sedan
+      suv: 3, // ₹3 per minute for SUV
+      van: 4, // ₹4 per minute for van
+    };
+
     const perPassengerRate = 50; // Additional ₹50 per extra passenger
     const baseFare = 200; // Base booking charge
     const serviceCharge = 100; // Service fee
 
-    const distanceCharge = distance * baseRates[vehicleType];
+    const distanceCharge = 3000
+    const durationCharge = 3500
     const passengerCharge = (parseInt(passengers) - 1) * perPassengerRate;
 
     const totalFare =
-      baseFare + distanceCharge + passengerCharge + serviceCharge;
+      baseFare +
+      durationCharge +
+      serviceCharge;
 
     return {
       baseFare: baseFare,
-      distanceCharge: distanceCharge,
+      distanceCharge: Math.round(distanceCharge),
+      durationCharge: Math.round(durationCharge),
       passengerCharge: passengerCharge,
       serviceCharge: serviceCharge,
       total: Math.round(totalFare),
@@ -53,11 +152,15 @@ const Booking = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "pickup") {
+      getAddressSuggestions(value, true);
+    } else if (name === "destination") {
+      getAddressSuggestions(value, false);
+    }
   };
 
   const calculateDistance = (pickup, destination) => {
-    // In a real app, this would use a mapping API
-    // This is a simplified estimation function
     const cityDistances = {
       mumbai: { pune: 150, delhi: 1400, bangalore: 1000 },
       delhi: { mumbai: 1400, bangalore: 1700, chennai: 2200 },
@@ -70,18 +173,33 @@ const Booking = () => {
     const normalizedPickup = normalizeName(pickup);
     const normalizedDestination = normalizeName(destination);
 
-    // Look up distance or return a default
     return cityDistances[normalizedPickup]?.[normalizedDestination] || 200;
   };
 
-  const handleNextStep = () => {
-    if (activeStep === 1) {
-      // Calculate distance when moving to next step
-      const distance = calculateDistance(formData.pickup, formData.destination);
-      setFormData((prev) => ({ ...prev, distance }));
+  const selectAddress = (suggestion, isPickup) => {
+    if (isPickup) {
+      setFormData((prev) => ({
+        ...prev,
+        pickup: suggestion.address,
+        pickupLat: suggestion.lat,
+        pickupLon: suggestion.lon,
+      }));
+      setShowPickupSuggestions(false);
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        destination: suggestion.address,
+        destLat: suggestion.lat,
+        destLon: suggestion.lon,
+      }));
+      setShowDestSuggestions(false);
     }
-    setActiveStep((prev) => prev + 1);
-    window.scrollTo(0, 0);
+  };
+
+  const handleNextStep = async () => {
+      setActiveStep((prev) => prev + 1);
+      window.scrollTo(0, 0);
+
   };
 
   const handlePrevStep = () => {
@@ -93,7 +211,6 @@ const Booking = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate API call
     setTimeout(() => {
       setIsSubmitting(false);
       setIsComplete(true);
@@ -101,7 +218,6 @@ const Booking = () => {
     }, 1500);
   };
 
-  // Calculate fare when needed
   const fareEstimate = estimateFare(
     formData.distance,
     formData.vehicleType,
@@ -178,9 +294,8 @@ const Booking = () => {
                       Trip Details
                     </h2>
 
-                    <form>
-                      <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <form className="space-y-6">
+                        <div className="grid grid-cols-1 gap-6">
                           <div className="relative">
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Pickup Location
@@ -193,10 +308,26 @@ const Booking = () => {
                                 value={formData.pickup}
                                 onChange={handleChange}
                                 placeholder="Enter pickup address"
-                                className="pl-10 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focusLring-blue-500 focus:border-transparent transition-all-200"
+                                className="pl-10 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all-200"
                                 required
                               />
                             </div>
+                            {showPickupSuggestions &&
+                              suggestedPickups.length > 0 && (
+                                <div className="absolute z-10 w-full mt-1 bg-white shadow-lg rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
+                                  {suggestedPickups.map((suggestion, index) => (
+                                    <div
+                                      key={index}
+                                      className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                                      onClick={() =>
+                                        selectAddress(suggestion, true)
+                                      }
+                                    >
+                                      {suggestion.address}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                           </div>
 
                           <div className="relative">
@@ -211,12 +342,27 @@ const Booking = () => {
                                 value={formData.destination}
                                 onChange={handleChange}
                                 placeholder="Enter destination address"
-                                className="pl-10 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focusLring-blue-500 focus:border-transparent transition-all-200"
+                                className="pl-10 w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all-200"
                                 required
                               />
                             </div>
+                            {showDestSuggestions &&
+                              suggestedDestinations.length > 0 && (
+                                <div className="absolute z-10 w-full mt-1 bg-white shadow-lg rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
+                                  {suggestedDestinations.map((suggestion, index) => (
+                                    <div
+                                      key={index}
+                                      className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                                      onClick={() =>
+                                        selectAddress(suggestion, false)
+                                      }
+                                    >
+                                      {suggestion.address}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                           </div>
-                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="relative">
@@ -460,18 +606,20 @@ const Booking = () => {
 
                       <div className="bg-blue-100 p-4 rounded-lg">
                         <div className="flex justify-between mb-2">
-                          <span className="text-gray-600">Base fare:</span>
+                          <span className="text-gray-600">
+                            Duration charge:
+                          </span>
                           <span className="font-medium">
-                            ₹{fareEstimate.baseFare}
+                            ₹{fareEstimate.durationCharge}
                           </span>
                         </div>
-                        <div className="flex justify-between mb-2">
-                          <span className="text-gray-600">
-                            Distance charge:
-                          </span>
-                          <span className="font-medium">
-                            ₹{fareEstimate.distanceCharge}
-                          </span>
+                        <div>
+                          <p className="text-sm text-gray-500">
+                            Estimated Travel Time
+                          </p>
+                          <p className="font-medium">
+                            {formData.duration} minutes
+                          </p>
                         </div>
                         {formData.passengers > 1 && (
                           <div className="flex justify-between mb-2">
@@ -481,6 +629,19 @@ const Booking = () => {
                             <span className="font-medium">
                               ₹{fareEstimate.passengerCharge}
                             </span>
+                          </div>
+                        )}
+                        {isCalculating && (
+                          <div className="flex items-center justify-center my-4">
+                            <Loader className="h-6 w-6 text-blue-500 animate-spin mr-2" />
+                            <span>Calculating route...</span>
+                          </div>
+                        )}
+
+                        {routeError && (
+                          <div className="flex items-center bg-red-50 text-red-700 p-3 rounded-lg my-4">
+                            <AlertCircle className="h-5 w-5 mr-2" />
+                            <span>{routeError}</span>
                           </div>
                         )}
                         <div className="flex justify-between mb-2">
