@@ -10,7 +10,7 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           <div className="space-y-6">
             <a to="/" className="text-2xl font-bold flex items-center">
-              <span className="text-blue-500">Cab</span>Fleet
+              <span className="text-blue-500">Ride</span>Easy
             </a>
             <p className="text-gray-400 max-w-xs">
               Premium cab management system for efficient transportation solutions and luxury travel experiences.
