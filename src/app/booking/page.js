@@ -127,11 +127,11 @@ const Booking = () => {
     };
 
     const perPassengerRate = 50; // Additional ₹50 per extra passenger
-    const baseFare = 200; // Base booking charge
+    const baseFare = 100; // Base booking charge
     const serviceCharge = 100; // Service fee
 
-    const distanceCharge = 3000
-    const durationCharge = 3500
+    const distanceCharge = 300
+    const durationCharge = 350
     const passengerCharge = (parseInt(passengers) - 1) * perPassengerRate;
 
     const totalFare =
