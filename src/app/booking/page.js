@@ -38,6 +38,7 @@ const Booking = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const getAddressSuggestions = async (query, isPickup) => {
     if (!query || query.length < 3) {
@@ -199,7 +200,6 @@ const Booking = () => {
   const handleNextStep = async () => {
       setActiveStep((prev) => prev + 1);
       window.scrollTo(0, 0);
-
   };
 
   const handlePrevStep = () => {
@@ -207,15 +207,103 @@ const Booking = () => {
     window.scrollTo(0, 0);
   };
 
-  const handleSubmit = (e) => {
+  // Function to send email to driver
+  const sendDriverNotification = async (bookingDetails) => {
+    try {
+      // In a real application, this would be an API call to your backend
+      // For demonstration purposes, we'll simulate this with a timeout
+      console.log("Sending driver notification email...");
+      
+      // Simulate API call
+      const driverEmail = "abc@gmail.com"; // In a real app, this would be fetched from your driver database
+      
+      // This would be your actual API endpoint
+      // const response = await fetch('/api/notify-driver', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify({
+      //     driverEmail,
+      //     bookingDetails
+      //   }),
+      // });
+      
+      // Simulate API response
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      console.log("Driver notification email sent successfully!");
+      setEmailSent(true);
+      return true;
+    } catch (error) {
+      console.error("Error sending driver notification:", error);
+      return false;
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    setTimeout(() => {
+    // Generate a booking reference
+    const bookingReference = `CAB-${Math.floor(100000 + Math.random() * 900000)}`;
+    
+    // Create booking details object for driver notification
+    const bookingDetails = {
+      reference: bookingReference,
+      customer: {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone
+      },
+      trip: {
+        pickup: formData.pickup,
+        destination: formData.destination,
+        date: formData.date,
+        time: formData.time,
+        passengers: formData.passengers,
+        vehicleType: formData.vehicleType === "sedan" 
+          ? "Executive Sedan" 
+          : formData.vehicleType === "suv" 
+            ? "Premium SUV" 
+            : "Luxury Van",
+        specialRequests: formData.specialRequests || "None"
+      },
+      payment: {
+        method: formData.paymentMethod === "card"
+          ? "Credit/Debit Card"
+          : formData.paymentMethod === "paypal"
+            ? "PayPal"
+            : "Cash (Pay to driver)",
+        fare: estimateFare(
+          formData.distance,
+          formData.vehicleType,
+          formData.passengers
+        ).total
+      }
+    };
+
+    try {
+      // First, process the booking in your system
+      console.log("Processing booking:", bookingDetails);
+      
+      // Then send notification to driver
+      await sendDriverNotification(bookingDetails);
+      
+      // Complete the booking process
+      setTimeout(() => {
+        setIsSubmitting(false);
+        setIsComplete(true);
+        console.log("Booking completed:", {
+          ...formData,
+          bookingReference
+        });
+      }, 700);
+    } catch (error) {
+      console.error("Error during booking process:", error);
       setIsSubmitting(false);
-      setIsComplete(true);
-      console.log("Booking data:", formData);
-    }, 1500);
+      // Handle error - show error message to user
+    }
   };
 
   const fareEstimate = estimateFare(
